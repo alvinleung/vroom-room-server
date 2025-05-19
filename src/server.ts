@@ -1,6 +1,8 @@
 import fs from "fs";
 import path from "path";
-import { createServer } from "https";
+import { createServer as createHttpsServer } from "https";
+import { createServer as createHttpServer } from "http";
+
 import { Server, Socket } from "socket.io";
 
 import dotenv from "dotenv";
@@ -10,6 +12,7 @@ import { UserState } from "./user";
 dotenv.config(); // Load .env
 
 // SETUP SSL AND SERVER
+const protocol = process.env.PROTOCOL;
 const keyPath = process.env.SSL_KEY_PATH!;
 const certPath = process.env.SSL_CERT_PATH!;
 const port = process.env.PORT;
@@ -17,10 +20,15 @@ const port = process.env.PORT;
 const key = fs.readFileSync(path.resolve(keyPath), "utf8");
 const cert = fs.readFileSync(path.resolve(certPath), "utf8");
 
-const httpServer = createServer({
-  key,
-  cert,
-});
+const httpServer = (()=> {
+  if(protocol === "http") {
+    return createHttpServer()
+  }
+  return createHttpsServer({
+    key,
+    cert,
+  })
+})();
 
 const io = new Server(httpServer, {
   cors: {
@@ -47,22 +55,25 @@ io.on("connection", (socket: Socket) => {
     message: "",
     color: "",
   };
+
+  // add user here
   allUsers.add(user);
+  socket.to(room).emit("user-add", user);
 
   socket.on("fetch-others", (callback) => {
     // fetch all the users
     callback([...allUsers].filter((u) => u !== user));
   });
 
-  socket.on("user-state-update", (state: Partial<UserState>) => {
+  socket.on("user-update", (state: Partial<UserState>) => {
     Object.assign(user, state);
 
     // propagate the user state update to other user
-    socket.to(room).emit("user-state-update", state);
+    socket.to(room).emit("user-update", state);
   });
 
   socket.on("disconnect", () => {
-    io.to(room).emit("delete-user", user);
+    io.to(room).emit("user-delete", user);
     allUsers.delete(user);
     console.log(`user ${socket.id} disconnected`);
   });
@@ -86,7 +97,7 @@ httpServer.listen(port, () => {
   console.log(
     "------------------------------------------------------------------------",
   );
-  console.log(`WebSocket server running on https://${address}:${port}`);
+  console.log(`WebSocket server running on ${protocol}://${address}:${port}`);
   console.log("Environment: ", process.env.NODE_ENV!);
   console.log(
     "------------------------------------------------------------------------",

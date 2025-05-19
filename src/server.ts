@@ -20,14 +20,14 @@ const port = process.env.PORT;
 const key = fs.readFileSync(path.resolve(keyPath), "utf8");
 const cert = fs.readFileSync(path.resolve(certPath), "utf8");
 
-const httpServer = (()=> {
-  if(protocol === "http") {
-    return createHttpServer()
+const httpServer = (() => {
+  if (protocol === "http") {
+    return createHttpServer();
   }
   return createHttpsServer({
     key,
     cert,
-  })
+  });
 })();
 
 const io = new Server(httpServer, {
@@ -65,7 +65,7 @@ io.on("connection", (socket: Socket) => {
     callback([...allUsers].filter((u) => u !== user));
   });
 
-  socket.on("user-update", (state: Partial<UserState>) => {
+  socket.on("emit-user-update", (state: Partial<UserState>) => {
     Object.assign(user, state);
 
     // propagate the user state update to other user

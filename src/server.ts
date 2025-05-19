@@ -29,9 +29,11 @@ const io = new Server(httpServer, {
 });
 
 // SERVER LOGIC
-const users = new Set<UserState>();
+const allUsers = new Set<UserState>();
+
 io.on("connection", (socket: Socket) => {
-  socket.join("main-room");
+  const room = "main-room";
+  socket.join(room);
 
   console.log(`user ${socket.id} disconnected`);
 
@@ -43,21 +45,30 @@ io.on("connection", (socket: Socket) => {
     velX: 0,
     velY: 0,
     message: "",
+    color: "",
   };
-  users.add(user);
+  allUsers.add(user);
 
-  io.on("user-state-update", (state: Partial<UserState>) => {
-    Object.assign(user, state);
+  socket.on("fetch-others", (callback) => {
+    // fetch all the users
+    callback([...allUsers].filter((u) => u !== user));
   });
 
-  io.on("disconnect", () => {
-    users.delete(user);
+  socket.on("user-state-update", (state: Partial<UserState>) => {
+    Object.assign(user, state);
+
+    // propagate the user state update to other user
+    socket.to(room).emit("user-state-update", state);
+  });
+
+  socket.on("disconnect", () => {
+    io.to(room).emit("delete-user", user);
+    allUsers.delete(user);
     console.log(`user ${socket.id} disconnected`);
   });
 });
 
 // START LISTENING TO INCOMING CONNECTIONS
-
 httpServer.listen(port, () => {
   const address = (() => {
     const nets = networkInterfaces();
@@ -75,7 +86,7 @@ httpServer.listen(port, () => {
   console.log(
     "------------------------------------------------------------------------",
   );
-  console.log(`WebSocket server running on http://${address}:${port}`);
+  console.log(`WebSocket server running on https://${address}:${port}`);
   console.log("Environment: ", process.env.NODE_ENV!);
   console.log(
     "------------------------------------------------------------------------",

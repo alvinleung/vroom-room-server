@@ -5,5 +5,6 @@ export interface UserState {
   y: number;
   velX: number;
   velY: number;
+  color: string;
   message: string;
 }

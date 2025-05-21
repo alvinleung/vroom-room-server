@@ -8,6 +8,7 @@ import { Server, Socket } from "socket.io";
 import dotenv from "dotenv";
 import { networkInterfaces } from "os";
 import { UserState } from "./user";
+import { table } from "console";
 
 dotenv.config(); // Load .env
 
@@ -37,9 +38,9 @@ const io = new Server(httpServer, {
 });
 
 // SERVER LOGIC
-const allUsers = new Set<UserState>();
+const allUsers = new Map<string, UserState>();
 
-io.on("connection", (socket: Socket) => {
+io.on("connection", async (socket: Socket) => {
   const room = "main-room";
   socket.join(room);
 
@@ -57,24 +58,29 @@ io.on("connection", (socket: Socket) => {
   };
 
   // add user here
-  allUsers.add(user);
+  allUsers.set(socket.id, user);
   socket.to(room).emit("user-add", user);
 
-  socket.on("fetch-others", (callback) => {
-    // fetch all the users
-    callback([...allUsers].filter((u) => u !== user));
+  socket.on("fetch-world", (callback) => {
+    // fetch all the users, except the user themselves
+    callback(Array.from(allUsers.values()).filter((u) => u !== user));
   });
 
-  socket.on("emit-user-update", (state: Partial<UserState>) => {
-    Object.assign(user, state);
+  socket.on("emit-user-update", (user: UserState) => {
+    const targetUser = allUsers.get(user.id);
+    if (targetUser === undefined) {
+      console.log("attempting to update an");
+      return;
+    }
+    Object.assign(targetUser, user);
 
     // propagate the user state update to other user
-    socket.to(room).emit("user-update", state);
+    socket.to(room).emit("user-update", targetUser);
   });
 
   socket.on("disconnect", () => {
     io.to(room).emit("user-delete", user);
-    allUsers.delete(user);
+    allUsers.delete(user.id);
     console.log(`user ${socket.id} disconnected`);
   });
 });
